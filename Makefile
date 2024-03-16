@@ -1,17 +1,18 @@
-APPNAME =lvl_gen
+TARGET =lvl_gen
 ODIR =build
 SRCDIR =src
+APPDIR =app
 
 compile:
-	ghc --make -i$(SRCDIR) $(APPNAME).hs -outputdir $(ODIR)/ -o $(APPNAME).app
+	ghc --make -i$(SRCDIR) $(APPDIR)/$(TARGET).hs -outputdir $(ODIR)/ -o $(ODIR)/$(TARGET).app
 
 run:
-	./$(APPNAME).app
+	$(ODIR)/$(TARGET).app
 
 .PHONY: clean
 
 clean:
-	rm -f $(ODIR)/*.o $(ODIR)/*.hi $(APPNAME)
+	rm -f $(ODIR)/*
 
 .PHONY: count
 
