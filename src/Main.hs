@@ -10,6 +10,8 @@ import Foreign.Storable (sizeOf)
 import LoadShaders
 import Graphics.GLUtil (readTexture, texture2DWrap)
 import Text.Printf
+import TilesetLoader
+import Data.Bifunctor ( Bifunctor(bimap) )
 
 data Descriptor =
      Descriptor VertexArrayObject NumArrayIndices
@@ -35,41 +37,53 @@ instance PrintfArg a => Show (GLMatrix a) where
                      m31 m32 m33 m34
                      m41 m42 m43 m44
 
+cellSize :: Int
+cellSize = 20
+
+gridDim :: (Int, Int)
+gridDim = (32,16)
+
+gridLayout :: [(Int, Int, (Int, Int, Int))]
+gridLayout = getGrid gridDim
+
+
 verticies :: [GLfloat]
-verticies =
-  [ -- | positions    -- | colors      -- | uv
-    0.5,  0.5, 0.0,   1.0, 1.0, 1.0,   1.0, 1.0,
-    0.5, -0.5, 0.0,   1.0, 1.0, 1.0,   1.0, 0.0,
-   -0.5, -0.5, 0.0,   1.0, 1.0, 1.0,   0.0, 0.0,
-   -0.5,  0.5, 0.0,   1.0, 1.0, 1.0,   0.0, 1.0
-  ]
+verticies = concatMap (\(x,y,(t,r1,r2)) ->
+  [ -- | positions                  -- | colors         -- | uv
+   fI x+1.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r2)/fI tilesetNImages, fI r1,
+   fI x+1.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r1)/fI tilesetNImages, fI (1-r2),
+   fI x+0.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r2)/fI tilesetNImages, fI (1-r1),
+   fI x+0.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r1)/fI tilesetNImages, fI r2
+  ]) gridLayout
+
+fI :: Int -> GLfloat
+fI = fromIntegral
 
 indices :: [GLuint]
-indices =
-  [          -- Note that we start from 0!
+indices = concatMap (\x -> map (+(4*x)) [
     0, 1, 3, -- First Triangle
     1, 2, 3  -- Second Triangle
-  ]
-     
-keyPressed :: GLFW.KeyCallback 
+  ]) [0..fromIntegral (length gridLayout -1)]
+
+keyPressed :: GLFW.KeyCallback
 keyPressed win GLFW.Key'Escape _ GLFW.KeyState'Pressed _ = shutdown win
 keyPressed _   _               _ _                     _ = return ()
-                                                                  
+
 shutdown :: GLFW.WindowCloseCallback
 shutdown win =
   do
     GLFW.destroyWindow win
     GLFW.terminate
     _ <- exitSuccess
-    return ()                                                                  
-     
+    return ()
+
 resizeWindow :: GLFW.WindowSizeCallback
 resizeWindow _ w h =
   do
     GL.viewport   $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
     GL.matrixMode $= GL.Projection
     GL.loadIdentity
-    GL.ortho2D 0 (realToFrac w) (realToFrac h) 0   
+    GL.ortho2D 0 (realToFrac w) (realToFrac h) 0
 
 openWindow :: String -> (Int, Int) -> IO GLFW.Window
 openWindow title (sizex,sizey) =
@@ -96,11 +110,11 @@ closeWindow win =
 display :: IO ()
 display =
   do
-    inWindow <- openWindow "NGL is Not GLoss" (256,256)
+    inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
     descriptor <- initResources verticies indices
     onDisplay inWindow descriptor
     closeWindow inWindow
-                 
+
 onDisplay :: GLFW.Window -> Descriptor -> IO ()
 onDisplay win descriptor@(Descriptor triangles numIndices) =
   do
@@ -109,10 +123,10 @@ onDisplay win descriptor@(Descriptor triangles numIndices) =
     bindVertexArrayObject $= Just triangles
     drawElements Triangles numIndices GL.UnsignedInt nullPtr
     GLFW.swapBuffers win
-   
+
     forever $ do
        GLFW.pollEvents
-       onDisplay win descriptor                 
+       onDisplay win descriptor
 
 -- | Init resources
 ---------------------------------------------------------------------------
@@ -126,20 +140,20 @@ initResources vs idx =
     -- | VBO
     vertexBuffer <- genObjectName
     bindBuffer ArrayBuffer $= Just vertexBuffer
-    let numVertices = length verticies
-    withArray verticies $ \ptr ->
+    let numVertices = length vs
+    withArray vs $ \ptr ->
       do
-        let sizev = fromIntegral (numVertices * sizeOf (head verticies))
+        let sizev = fromIntegral (numVertices * sizeOf (head vs))
         bufferData ArrayBuffer $= (sizev, ptr, StaticDraw)
 
     -- | EBO
     elementBuffer <- genObjectName
     bindBuffer ElementArrayBuffer $= Just elementBuffer
-    let numIndices = length indices
+    let numIndices = length idx
     withArray idx $ \ptr ->
       do
-        let indicesSize = fromIntegral (numIndices * (length indices))
-        bufferData ElementArrayBuffer $= (indicesSize, ptr, StaticDraw)
+        let idxSize = fromIntegral (numIndices * length idx)
+        bufferData ElementArrayBuffer $= (idxSize, ptr, StaticDraw)
 
     -- | Bind the pointer to the vertex attribute data
     let floatSize  = (fromIntegral $ sizeOf (0.0::GLfloat)) :: GLsizei
@@ -169,11 +183,11 @@ initResources vs idx =
 
     -- | Assign Textures
     activeTexture            $= TextureUnit 0
-    let tex_00 = "resources/tilesets-Circuit/connection.png"
+    let tex_00 = tilesetImage
     tx0 <- loadTex tex_00
     texture Texture2D        $= Enabled
     textureBinding Texture2D $= Just tx0
-    
+
     -- || Shaders
     program <- loadShaders [
         ShaderInfo VertexShader   (FileSource "resources/shaders/shader.vert"),
@@ -182,19 +196,19 @@ initResources vs idx =
 
     -- Set Uniforms
     location0 <- get (uniformLocation program "tex_00")
-    uniform location0 $= (TextureUnit 0)
+    uniform location0 $= TextureUnit 0
 
     -- Set Transform Matrix
     let tr =
-          [ 1, 0, 0, 0
-          , 0, 1, 0, 0
+          [ 1/fromIntegral (fst gridDim), 0, 0, 0
+          , 0, 1/fromIntegral (snd gridDim), 0, 0
           , 0, 0, 1, 0
-          , 0, 0, 0, 0.5 ] :: [GLfloat]
-          
+          , -0.5, -0.5, 0, 0.5 ] :: [GLfloat]
+
     transform <- GL.newMatrix ColumnMajor tr :: IO (GLmatrix GLfloat)
-    location2 <- get (uniformLocation program "transform")
-    uniform location2 $= (transform)
-    
+    location1 <- get (uniformLocation program "transform")
+    uniform location1 $= transform
+
     -- || Unload buffers
     bindVertexArrayObject         $= Nothing
     -- bindBuffer ElementArrayBuffer $= Nothing
