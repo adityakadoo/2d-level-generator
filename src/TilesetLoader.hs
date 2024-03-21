@@ -1,6 +1,7 @@
 module TilesetLoader where
 
-import WaveFuncCollapse ( waveFuncCollapse, Tile, Edge )
+import WaveFuncCollapse ( Edge, Tile, waveFuncCollapse )
+import Randomness ( Seed )
 
 tilesetImage :: String
 tilesetImage = "resources/tilesets-Circuit/whole.png"
@@ -11,11 +12,11 @@ tilesetSize = 40
 tilesetNImages :: Int
 tilesetNImages = 14
 
-getGrid :: (Int, Int) -> [(Int, Int, (Int, Int, Int))]
-getGrid dim = concat (enumerate2D (map (map tileMapping) reversedGrid))
+getGrid :: Seed -> (Int, Int) -> [(Int, Int, (Int, Int, Int))]
+getGrid seed dim = concat (enumerate2D (map (map tileMapping) reversedGrid))
   where
     reversedGrid = map reverse solvedGrid 
-    solvedGrid = head (waveFuncCollapse tilesetSize tileEdges dim)
+    solvedGrid = head (waveFuncCollapse seed tilesetSize tileEdges dim)
 
 enumerate2D :: [[a]] -> [[(Int, Int, a)]]
 enumerate2D m = map (\(i, xs) -> map (\(j, x) -> (i,j,x)) xs) (enumerate1D (map enumerate1D m))

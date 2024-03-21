@@ -2,6 +2,7 @@ module WaveFuncCollapse where
 
 import Data.List
 import Randomness
+import System.Random
 
 type Grid = Matrix Tile
 type Matrix a = [Row a]
@@ -10,10 +11,10 @@ type Tile = Int
 type Edge = Int
 type Choices = [Tile]
 
-waveFuncCollapse :: Int -> (Tile -> [Edge]) -> (Int, Int) -> [Grid]
-waveFuncCollapse nTiles edges (gridWidth, gridHeight) = solver blank
+waveFuncCollapse :: Seed -> Int -> (Tile -> [Edge]) -> (Int, Int) -> [Grid]
+waveFuncCollapse seed nTiles edges (gridWidth, gridHeight) = solver blank
   where
-    solver = search nTiles edges . prune edges . choices nTiles
+    solver = search (mkStdGen seed) nTiles edges . prune edges . choices nTiles
     border = replicate gridHeight 17:replicate (gridWidth-2)
             (17:replicate (gridHeight-2) nTiles ++ [17])
             ++ [replicate gridHeight 17]
@@ -51,14 +52,16 @@ reduce edges d (as:bs:xss) =  ras : reduce edges d (rbs:xss)
                 bottomEdge = (!!(3-d)) . edges
                 topEdge = (!!d) . edges
 
-search :: Int -> (Tile -> [Edge]) -> Matrix Choices -> [Grid]
-search nTiles edges m | blocked edges m = []
+search :: RandomGen g => g -> Int -> (Tile -> [Edge]) -> Matrix Choices -> [Grid]
+search g nTiles edges m | blocked edges m = []
                | complete m = collapse m
-               | otherwise = [g | m1 <- expand nTiles m,
-                              g <- search nTiles edges (prune edges m1)]
+               | otherwise = [g | m1 <- expand g1 nTiles m,
+                              g <- search g2 nTiles edges (prune edges m1)]
+                          where
+                            (g1,g2) = split g
 
-expand :: Int -> Matrix Choices -> [Matrix Choices]
-expand nTiles m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- shuffle cs]
+expand :: RandomGen g => g -> Int -> Matrix Choices -> [Matrix Choices]
+expand g nTiles m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- shuffle g cs]
   where
     (row1, cs : row2)    = span ((/=minEntropy) . length) row
     (rows1, row : rows2) = span (all ((/=minEntropy) . length)) m

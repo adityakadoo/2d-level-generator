@@ -12,6 +12,8 @@ import Graphics.GLUtil (readTexture, texture2DWrap)
 import Text.Printf
 import TilesetLoader
 import Data.Bifunctor ( Bifunctor(bimap) )
+import System.Environment (getArgs)
+import Randomness ( Seed )
 
 data Descriptor =
      Descriptor VertexArrayObject NumArrayIndices
@@ -43,18 +45,17 @@ cellSize = 20
 gridDim :: (Int, Int)
 gridDim = (32,16)
 
-gridLayout :: [(Int, Int, (Int, Int, Int))]
-gridLayout = getGrid gridDim
+gridLayout :: Seed -> [(Int, Int, (Int, Int, Int))]
+gridLayout seed = getGrid seed gridDim
 
-
-verticies :: [GLfloat]
-verticies = concatMap (\(x,y,(t,r1,r2)) ->
+verticies :: Int -> [GLfloat]
+verticies seed = concatMap (\(x,y,(t,r1,r2)) ->
   [ -- | positions                  -- | colors         -- | uv
    fI x+1.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r2)/fI tilesetNImages, fI r1,
    fI x+1.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r1)/fI tilesetNImages, fI (1-r2),
    fI x+0.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r2)/fI tilesetNImages, fI (1-r1),
    fI x+0.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r1)/fI tilesetNImages, fI r2
-  ]) gridLayout
+  ]) (gridLayout seed)
 
 fI :: Int -> GLfloat
 fI = fromIntegral
@@ -63,7 +64,7 @@ indices :: [GLuint]
 indices = concatMap (\x -> map (+(4*x)) [
     0, 1, 3, -- First Triangle
     1, 2, 3  -- Second Triangle
-  ]) [0..fromIntegral (length gridLayout -1)]
+  ]) [0..fromIntegral (uncurry (*) gridDim)]
 
 keyPressed :: GLFW.KeyCallback
 keyPressed win GLFW.Key'Escape _ GLFW.KeyState'Pressed _ = shutdown win
@@ -107,11 +108,11 @@ closeWindow win =
     GLFW.destroyWindow win
     GLFW.terminate
 
-display :: IO ()
-display =
+display :: Seed -> IO ()
+display seed =
   do
     inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
-    descriptor <- initResources verticies indices
+    descriptor <- initResources (verticies seed) indices
     onDisplay inWindow descriptor
     closeWindow inWindow
 
@@ -230,4 +231,6 @@ loadTex f =
 main :: IO ()
 main =
   do
-    display
+    args <- getArgs 
+    let seed = (read (head args) :: Seed)
+    display seed
