@@ -15,9 +15,17 @@ import Data.Bifunctor ( Bifunctor(bimap) )
 import System.Environment (getArgs)
 import Randomness ( Seed )
 import Data.List (transpose)
+import Control.Monad.Random (RandomGen, mkStdGen, StdGen)
+import WaveFuncCollapse
+import Data.IORef (IORef, newIORef, writeIORef)
 
 data Descriptor =
-     Descriptor VertexArrayObject NumArrayIndices
+     Descriptor BufferObject NumArrayIndices
+
+data Context = Context {
+  g :: StdGen,
+  gridChoices :: [WaveFuncCollapse.Matrix Choices]
+}
 
 data GLMatrix a =
      GLMatrix !a !a !a !a
@@ -27,6 +35,7 @@ data GLMatrix a =
                 deriving Eq
 
 instance PrintfArg a => Show (GLMatrix a) where
+  show :: PrintfArg a => GLMatrix a -> String
   show (GLMatrix m11 m12 m13 m14
                  m21 m22 m23 m24
                  m31 m32 m33 m34
@@ -44,22 +53,32 @@ cellSize :: Int
 cellSize = 20
 
 gridDim :: (Int, Int)
-gridDim = (32,16)
+gridDim = (16,16)
 
-getVertices :: Int -> (Int, Int) -> [GLfloat]
-getVertices seed dim = concatMap (\(x,y,(t,r1,r2,r3)) ->
+firstGrid :: RandomGen g => g -> [[(Tile, Int)]]
+firstGrid g = getGrid g gridDim
+
+getVertices :: [[(Tile, Int)]] -> [GLfloat]
+getVertices grid = concatMap tileToVert
+  (concat (enumerate2D (map (map tileMapping . reverse) (transpose grid))))
+
+tileToVert :: (Int, Int, (Int, (Int, Int, Int), Int)) -> [GLfloat]
+tileToVert (x,y,(t,(r1,r2,r3),e)) =
   [ -- | positions                  -- | colors         -- | uv
-   fI x+1.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r2)/fI getNImages, fI r1,
-   fI x+1.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r1)/fI getNImages, fI (1-r2),
-   fI x+0.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r2)/fI getNImages, fI (1-r1),
-   fI x+0.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r1)/fI getNImages, fI r2
-  ]) (concat (enumerate2D (map (map tileMapping . reverse) (transpose (getGrid seed dim)))))
+   fI x+1.0, fI y+1.0, 0.0,   col, col, col,   fI (t+1-r2)/fI getNImages, fI (r1*(1-r3) + r2*r3),
+   fI x+1.0, fI y+0.0, 0.0,   col, col, col,   fI (t+1-r1)/fI getNImages, fI ((1-r2)*(1-r3) + (1-r1)*r3),
+   fI x+0.0, fI y+0.0, 0.0,   col, col, col,   fI (t+r2)/fI getNImages, fI ((1-r1)*(1-r3) + (1-r2)*r3),
+   fI x+0.0, fI y+1.0, 0.0,   col, col, col,   fI (t+r1)/fI getNImages, fI (r2*(1-r3) + r1*r3)
+  ]
+  where
+    col | e>1       = fI (getNImages-e) / fI (getNImages-1) / 2
+        | otherwise = 1.0
 
 fI :: Int -> GLfloat
 fI = fromIntegral
 
-vertices :: Int -> [GLfloat]
-vertices seed = getVertices seed gridDim
+vertices :: RandomGen g => g -> [GLfloat]
+vertices g = getVertices (firstGrid g)
 
 indices :: [GLuint]
 indices = concatMap (\x -> map (+(4*x)) [
@@ -109,29 +128,47 @@ closeWindow win =
     GLFW.destroyWindow win
     GLFW.terminate
 
-display :: Seed -> IO ()
-display seed =
+display :: StdGen -> IO ()
+display g =
   do
     inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
-    descriptor <- initResources (vertices seed) indices
-    onDisplay inWindow descriptor
+    let context = (initChoices gridDim, g)
+    descriptor <- initResources ((getVertices.getFirstGrid.fst) context) indices
+    onDisplay inWindow descriptor context
     closeWindow inWindow
 
-onDisplay :: GLFW.Window -> Descriptor -> IO ()
-onDisplay win descriptor@(Descriptor triangles numIndices) =
+onDisplay :: RandomGen g => Window -> Descriptor -> ([WaveFuncCollapse.Matrix Choices], g) -> IO a
+onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) =
   do
     GL.clearColor $= Color4 0 0 0 1
     GL.clear [ColorBuffer]
-    bindVertexArrayObject $= Just triangles
+
+    updateVBO ((getVertices.getFirstGrid) gChoices) descriptor
+
+    bindBuffer ArrayBuffer $= Just vertexBuffer
     drawElements Triangles numIndices GL.UnsignedInt nullPtr
     GLFW.swapBuffers win
 
     forever $ do
        GLFW.pollEvents
-       onDisplay win descriptor
+       onDisplay win descriptor (stepChoices g gChoices)
 
 -- | Init resources
 ---------------------------------------------------------------------------
+updateVBO :: [GLfloat] -> Descriptor -> IO ()
+updateVBO vs descriptor@(Descriptor vertexBuffer numIndices) =
+  do
+    bindBuffer ArrayBuffer $= Just vertexBuffer
+    let numVertices = length vs
+    withArray vs $ \ptr ->
+      do
+        let sizev = fromIntegral (numVertices * sizeOf (head vs))
+        bufferData ArrayBuffer $= (sizev, ptr, StaticDraw)
+    
+    bindBuffer ArrayBuffer $= Nothing
+    -- return $ Descriptor vertexBuffer numIndices
+
+
 initResources :: [GLfloat] -> [GLuint] -> IO Descriptor
 initResources vs idx =
   do
@@ -212,10 +249,10 @@ initResources vs idx =
     uniform location1 $= transform
 
     -- || Unload buffers
-    bindVertexArrayObject         $= Nothing
-    -- bindBuffer ElementArrayBuffer $= Nothing
+    -- bindVertexArrayObject         $= Nothing
+    bindBuffer ArrayBuffer $= Nothing
 
-    return $ Descriptor triangles (fromIntegral numIndices)
+    return $ Descriptor vertexBuffer (fromIntegral numIndices)
 
 bufferOffset :: Integral a => a -> Ptr b
 bufferOffset = plusPtr nullPtr . fromIntegral
@@ -232,6 +269,6 @@ loadTex f =
 main :: IO ()
 main =
   do
-    args <- getArgs 
+    args <- getArgs
     let seed = (read (head args) :: Seed)
-    display seed
+    display (mkStdGen seed)

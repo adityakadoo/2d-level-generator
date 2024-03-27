@@ -14,12 +14,19 @@ type Choices = [Tile]
 maxInt :: Int
 maxInt = 10000
 
-waveFuncCollapse :: Seed -> [Tile] -> (Tile -> [[Tile]]) -> (Tile -> Int) -> (Int, Int) -> [Grid]
-waveFuncCollapse seed tiles neighbours info (gridWidth, gridHeight) = solver blank
+waveFuncStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> ([Matrix Choices], g)
+waveFuncStep g neighbours info (m:ms) = searchStep g neighbours info (prune neighbours m:ms)
+
+initGrid :: [Tile] -> (Int, Int) -> Matrix Choices
+initGrid tiles (gridWidth, gridHeight) = choices tiles blank
   where
-    solver = search (mkStdGen seed) neighbours info . prune neighbours . choices tiles
     blank = replicate gridWidth (replicate gridHeight maxInt)
-    solved = replicate gridWidth (replicate gridHeight 4)
+    solved = replicate gridWidth (replicate gridHeight 0)
+
+waveFuncCollapse :: RandomGen g => g -> [Tile] -> (Tile -> [[Tile]]) -> (Tile -> Int) -> (Int, Int) -> [Grid]
+waveFuncCollapse g tiles neighbours info dim = solver (initGrid tiles dim)
+  where
+    solver = search g neighbours info . prune neighbours
 
 choices :: [Tile] -> Grid -> Matrix Choices
 choices tiles = map (map choice)
@@ -57,11 +64,11 @@ search g neighbours info m
                           where
                             (g1,g2) = split g
 
-searchStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> [Matrix Choices]
+searchStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> ([Matrix Choices], g)
 searchStep g neighbours info (m:ms)
-    | blocked neighbours m = ms
-    | complete m = m:ms
-    | otherwise = expand g1 info m ++ ms
+    | blocked neighbours m = (ms,g)
+    | complete m = (m:ms,g)
+    | otherwise = (expand g1 info m ++ ms,g2)
       where
         (g1,g2) = split g
 

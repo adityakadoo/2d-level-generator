@@ -123,7 +123,7 @@ with open(hs_outfile, '+w') as f:
         "textureImg :: String\n",
         f"textureImg = \"resources/tilesets/{filename}/whole.png\"\n",
         "\n",
-        "tileIdx :: [Int]\n",
+        "tileIdx :: [Tile]\n",
         f"tileIdx = {list(t_edges.keys())}\n",
         "\n",
         "nImages :: Int\n",

@@ -5,7 +5,7 @@ import WaveFuncCollapse (Tile)
 textureImg :: String
 textureImg = "resources/tilesets/floorplan/whole.png"
 
-tileIdx :: [Int]
+tileIdx :: [Tile]
 tileIdx = [0, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 56, 57, 58, 59, 64, 65, 66, 67, 72, 73, 80, 81, 82, 83, 88, 89, 90, 91, 96, 97, 98, 99, 104, 105, 106, 107, 112, 113, 120, 128]
 
 nImages :: Int

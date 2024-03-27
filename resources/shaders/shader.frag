@@ -10,6 +10,6 @@ out vec4 fColor;
 
 void main()
 {
-  fColor = vec4( texture(tex_00, uv).rgb
+  fColor = vec4( texture(tex_00, uv).rgb * clr
                , 1.0 );
 }
