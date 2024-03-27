@@ -4,10 +4,10 @@ import System.Random
 
 type Seed = Int
 
-shuffle :: RandomGen g => g -> [a] -> [a]
-shuffle = modShuffle . randoms
+shuffle :: RandomGen g => Eq a => g -> [a] -> [a]
+shuffle = shuffle' . randoms
 
-modShuffle :: [Int] -> [a] -> [a]
-modShuffle (i:is) [] = []
-modShuffle (i:is) xs = let (firsts, rest) = splitAt (i `mod` length xs) xs
-                     in head rest : modShuffle is (firsts ++ tail rest)
+shuffle' :: Eq a => [Int] -> [a] -> [a]
+shuffle' (i:is) [] = []
+shuffle' (i:is) xs = let (firsts, rest) = splitAt (i `mod` length xs) xs
+                     in head rest : shuffle' is (filter (/= head rest) (firsts ++ tail rest))

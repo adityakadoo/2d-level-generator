@@ -11,28 +11,24 @@ type Tile = Int
 type Edge = Int
 type Choices = [Tile]
 
-waveFuncCollapse :: Seed -> Int -> (Tile -> [Edge]) -> (Int, Int) -> [Grid]
-waveFuncCollapse seed nTiles edges (gridWidth, gridHeight) = solver blank
-  where
-    solver = search (mkStdGen seed) nTiles edges . prune edges . choices nTiles
-    border = replicate gridHeight 17:replicate (gridWidth-2)
-            (17:replicate (gridHeight-2) nTiles ++ [17])
-            ++ [replicate gridHeight 17]
-    blank = replicate gridWidth (replicate gridHeight nTiles)
-    solved = replicate gridWidth (replicate gridHeight 2)
-    one = (3:replicate (gridHeight-1) nTiles):replicate (gridWidth-1) (replicate gridHeight nTiles)
+maxInt :: Int
+maxInt = 10000
 
-choices :: Int -> Grid -> Matrix Choices
-choices nTiles = map (map choice)
+waveFuncCollapse :: Seed -> [Tile] -> (Tile -> [[Tile]]) -> (Tile -> Int) -> (Int, Int) -> [Grid]
+waveFuncCollapse seed tiles neighbours info (gridWidth, gridHeight) = solver blank
   where
-    choice v = if v == nTiles then
-                [0..nTiles-1]
-               else
-                [v]
+    solver = search (mkStdGen seed) neighbours info . prune neighbours . choices tiles
+    blank = replicate gridWidth (replicate gridHeight maxInt)
+    solved = replicate gridWidth (replicate gridHeight 4)
 
-prune :: (Tile -> [Edge]) -> Matrix Choices -> Matrix Choices
-prune edges = pruneBy cols 0 . pruneBy rows 1
-        where pruneBy f d = f . map (reduce edges d) . f
+choices :: [Tile] -> Grid -> Matrix Choices
+choices tiles = map (map choice)
+  where
+    choice v = if v == maxInt then tiles else [v]
+
+prune :: (Tile -> [[Tile]]) -> Matrix Choices -> Matrix Choices
+prune neighbours = pruneBy cols 0 . pruneBy rows 1
+        where pruneBy f d = f . map (reduce neighbours d) . f
 
 rows :: Matrix a -> [Row a]
 rows = transpose
@@ -40,57 +36,68 @@ rows = transpose
 cols :: Matrix a -> [Row a]
 cols = id
 
-reduce :: (Tile -> [Edge]) -> Int -> Row Choices -> Row Choices
-reduce edges d [] = []
-reduce edges d [xs] = [xs]
-reduce edges d (as:bs:xss) =  ras : reduce edges d (rbs:xss)
+reduce :: (Tile -> [[Tile]]) -> Int -> Row Choices -> Row Choices
+reduce neighbours d [] = []
+reduce neighbours d [xs] = [xs]
+reduce neighbours d (as:bs:xss) =  ras : reduce neighbours d (rbs:xss)
               where
-                ras = filter (\a -> bottomEdge a `elem` eb) as
-                eb = map topEdge rbs
-                rbs = filter (\b -> topEdge b `elem` ea) bs
-                ea = map bottomEdge as
-                bottomEdge = (!!(3-d)) . edges
-                topEdge = (!!d) . edges
+                ras = filter (`elem` eb) as
+                eb = concatMap topEdge rbs
+                rbs = filter (`elem` ea) bs
+                ea = concatMap bottomEdge as
+                bottomEdge = (!!(3-d)) . neighbours
+                topEdge = (!!d) . neighbours
 
-search :: RandomGen g => g -> Int -> (Tile -> [Edge]) -> Matrix Choices -> [Grid]
-search g nTiles edges m | blocked edges m = []
-               | complete m = collapse m
-               | otherwise = [g | m1 <- expand g1 nTiles m,
-                              g <- search g2 nTiles edges (prune edges m1)]
+search :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> Matrix Choices -> [Grid]
+search g neighbours info m
+              | blocked neighbours m = []
+              | complete m = collapse m
+              | otherwise = [g | m1 <- expand g1 info m,
+                              g <- search g2 neighbours info (prune neighbours m1)]
                           where
                             (g1,g2) = split g
 
-expand :: RandomGen g => g -> Int -> Matrix Choices -> [Matrix Choices]
-expand g nTiles m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- shuffle g cs]
+searchStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> [Matrix Choices]
+searchStep g neighbours info (m:ms)
+    | blocked neighbours m = ms
+    | complete m = m:ms
+    | otherwise = expand g1 info m ++ ms
+      where
+        (g1,g2) = split g
+
+expand :: RandomGen g => g -> (Tile -> Int) -> Matrix Choices -> [Matrix Choices]
+expand g info m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- xcs]
   where
+    xcs = shuffle g (concatMap (\c -> replicate (info c) c) cs)
     (row1, cs : row2)    = span ((/=minEntropy) . length) row
     (rows1, row : rows2) = span (all ((/=minEntropy) . length)) m
     minEntropy = minimum (map (minimum . replace . map length) m)
     replace [] = []
     replace (x:xs)
         | x > 1 = x:replace xs
-        | otherwise = nTiles:replace xs
+        | otherwise = maxInt:replace xs
 
-blocked :: (Tile -> [Edge]) -> Matrix Choices -> Bool
-blocked edges m = void m || not (safe edges m)
+blocked :: (Tile -> [[Tile]]) -> Matrix Choices -> Bool
+blocked neighbours m = void m || not (safe neighbours m)
 
 void :: Matrix Choices -> Bool
 void = any (any null)
 
-safe :: (Tile -> [Edge]) -> Matrix Choices -> Bool
-safe edges m = all (consistent edges 1) (rows m) &&
-         all (consistent edges 0) (cols m)
+safe :: (Tile -> [[Tile]]) -> Matrix Choices -> Bool
+safe neighbours m = all (consistent neighbours 1) (rows m) &&
+         all (consistent neighbours 0) (cols m)
 
-consistent :: (Tile -> [Edge]) -> Int -> Row Choices -> Bool
-consistent edges d [] = True
-consistent edges d [xs] = True
-consistent edges d (as:bs:xss) = not (null (ea `intersect` eb))
-                                && consistent edges d (bs:xss)
+consistent :: (Tile -> [[Tile]]) -> Int -> Row Choices -> Bool
+consistent neighbours d [] = True
+consistent neighbours d [xs] = True
+consistent neighbours d (as:bs:xss) = not (null (as `intersect` eb)
+                                  || null (ea `intersect` bs))
+                                && consistent neighbours d (bs:xss)
               where
-                eb = map topEdge bs
-                ea = map bottomEdge as
-                bottomEdge = (!!(3-d)) . edges
-                topEdge = (!!d) . edges
+                eb = concatMap topEdge bs
+                ea = concatMap bottomEdge as
+                bottomEdge = (!!(3-d)) . neighbours
+                topEdge = (!!d) . neighbours
 
 complete :: Matrix Choices -> Bool
 complete = all (all single)

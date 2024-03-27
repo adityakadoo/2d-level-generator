@@ -14,6 +14,7 @@ import TilesetLoader
 import Data.Bifunctor ( Bifunctor(bimap) )
 import System.Environment (getArgs)
 import Randomness ( Seed )
+import Data.List (transpose)
 
 data Descriptor =
      Descriptor VertexArrayObject NumArrayIndices
@@ -45,20 +46,20 @@ cellSize = 20
 gridDim :: (Int, Int)
 gridDim = (32,16)
 
-gridLayout :: Seed -> [(Int, Int, (Int, Int, Int))]
-gridLayout seed = getGrid seed gridDim
-
-verticies :: Int -> [GLfloat]
-verticies seed = concatMap (\(x,y,(t,r1,r2)) ->
+getVertices :: Int -> (Int, Int) -> [GLfloat]
+getVertices seed dim = concatMap (\(x,y,(t,r1,r2,r3)) ->
   [ -- | positions                  -- | colors         -- | uv
-   fI x+1.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r2)/fI tilesetNImages, fI r1,
-   fI x+1.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r1)/fI tilesetNImages, fI (1-r2),
-   fI x+0.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r2)/fI tilesetNImages, fI (1-r1),
-   fI x+0.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r1)/fI tilesetNImages, fI r2
-  ]) (gridLayout seed)
+   fI x+1.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r2)/fI getNImages, fI r1,
+   fI x+1.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+1-r1)/fI getNImages, fI (1-r2),
+   fI x+0.0, fI y+0.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r2)/fI getNImages, fI (1-r1),
+   fI x+0.0, fI y+1.0, 0.0,   0.0, 0.0, 0.0,   fI (t+r1)/fI getNImages, fI r2
+  ]) (concat (enumerate2D (map (map tileMapping . reverse) (transpose (getGrid seed dim)))))
 
 fI :: Int -> GLfloat
 fI = fromIntegral
+
+vertices :: Int -> [GLfloat]
+vertices seed = getVertices seed gridDim
 
 indices :: [GLuint]
 indices = concatMap (\x -> map (+(4*x)) [
@@ -112,7 +113,7 @@ display :: Seed -> IO ()
 display seed =
   do
     inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
-    descriptor <- initResources (verticies seed) indices
+    descriptor <- initResources (vertices seed) indices
     onDisplay inWindow descriptor
     closeWindow inWindow
 
@@ -184,7 +185,7 @@ initResources vs idx =
 
     -- | Assign Textures
     activeTexture            $= TextureUnit 0
-    let tex_00 = tilesetImage
+    let tex_00 = getTilesetImage
     tx0 <- loadTex tex_00
     texture Texture2D        $= Enabled
     textureBinding Texture2D $= Just tx0
