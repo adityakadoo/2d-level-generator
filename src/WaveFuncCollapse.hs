@@ -3,16 +3,17 @@ module WaveFuncCollapse where
 import Data.List
 import Randomness
 import System.Random
+import Data.Word (Word8)
 
 type Grid = Matrix Tile
 type Matrix a = [Row a]
 type Row a = [a]
-type Tile = Int
+type Tile = Word8
 type Edge = Int
 type Choices = [Tile]
 
-maxInt :: Int
-maxInt = 10000
+maxTile :: Tile
+maxTile = 255
 
 waveFuncStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> ([Matrix Choices], g)
 waveFuncStep g neighbours info (m:ms) = searchStep g neighbours info (prune neighbours m:ms)
@@ -20,7 +21,7 @@ waveFuncStep g neighbours info (m:ms) = searchStep g neighbours info (prune neig
 initGrid :: [Tile] -> (Int, Int) -> Matrix Choices
 initGrid tiles (gridWidth, gridHeight) = choices tiles blank
   where
-    blank = replicate gridWidth (replicate gridHeight maxInt)
+    blank = replicate gridWidth (replicate gridHeight maxTile)
     solved = replicate gridWidth (replicate gridHeight 0)
 
 waveFuncCollapse :: RandomGen g => g -> [Tile] -> (Tile -> [[Tile]]) -> (Tile -> Int) -> (Int, Int) -> [Grid]
@@ -31,7 +32,7 @@ waveFuncCollapse g tiles neighbours info dim = solver (initGrid tiles dim)
 choices :: [Tile] -> Grid -> Matrix Choices
 choices tiles = map (map choice)
   where
-    choice v = if v == maxInt then tiles else [v]
+    choice v = if v == maxTile then tiles else [v]
 
 prune :: (Tile -> [[Tile]]) -> Matrix Choices -> Matrix Choices
 prune neighbours = pruneBy cols 0 . pruneBy rows 1
@@ -76,13 +77,13 @@ expand :: RandomGen g => g -> (Tile -> Int) -> Matrix Choices -> [Matrix Choices
 expand g info m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- xcs]
   where
     xcs = shuffle g (concatMap (\c -> replicate (info c) c) cs)
-    (row1, cs : row2)    = span ((/=minEntropy) . length) row
-    (rows1, row : rows2) = span (all ((/=minEntropy) . length)) m
-    minEntropy = minimum (map (minimum . replace . map length) m)
+    (row1, cs : row2)    = span ((/=minEntropy) . (fromIntegral.length)) row
+    (rows1, row : rows2) = span (all ((/=minEntropy) . (fromIntegral.length))) m
+    minEntropy = minimum (map (minimum . replace . map (fromIntegral.length)) m)
     replace [] = []
     replace (x:xs)
         | x > 1 = x:replace xs
-        | otherwise = maxInt:replace xs
+        | otherwise = maxTile:replace xs
 
 blocked :: (Tile -> [[Tile]]) -> Matrix Choices -> Bool
 blocked neighbours m = void m || not (safe neighbours m)

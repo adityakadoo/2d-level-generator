@@ -30,7 +30,7 @@ tileInfo t
   where
     q = t `div` 8
 
-tileNeighbours :: Tile -> [[Int]]
+tileNeighbours :: Tile -> [[Tile]]
 tileNeighbours 0 = [
     [0, 66, 67, 99, 98, 40, 41, 73, 43, 105, 104, 48, 18, 82],
     [0, 88, 59],

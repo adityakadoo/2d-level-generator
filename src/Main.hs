@@ -18,6 +18,7 @@ import Data.List (transpose)
 import Control.Monad.Random (RandomGen, mkStdGen, StdGen)
 import WaveFuncCollapse
 import Data.IORef (IORef, newIORef, writeIORef)
+import Data.Word (Word8)
 
 data Descriptor =
      Descriptor BufferObject NumArrayIndices
@@ -50,25 +51,25 @@ instance PrintfArg a => Show (GLMatrix a) where
                      m41 m42 m43 m44
 
 cellSize :: Int
-cellSize = 20
+cellSize = 40
 
 gridDim :: (Int, Int)
 gridDim = (16,16)
 
-firstGrid :: RandomGen g => g -> [[(Tile, Int)]]
+firstGrid :: RandomGen g => g -> [[(Tile, Word8)]]
 firstGrid g = getGrid g gridDim
 
-getVertices :: [[(Tile, Int)]] -> [GLfloat]
+getVertices :: [[(Tile, Word8)]] -> [GLfloat]
 getVertices grid = concatMap tileToVert
   (concat (enumerate2D (map (map tileMapping . reverse) (transpose grid))))
 
 tileToVert :: (Int, Int, (Int, (Int, Int, Int), Int)) -> [GLfloat]
 tileToVert (x,y,(t,(r1,r2,r3),e)) =
   [ -- | positions                  -- | colors         -- | uv
-   fI x+1.0, fI y+1.0, 0.0,   col, col, col,   fI (t+1-r2)/fI getNImages, fI (r1*(1-r3) + r2*r3),
-   fI x+1.0, fI y+0.0, 0.0,   col, col, col,   fI (t+1-r1)/fI getNImages, fI ((1-r2)*(1-r3) + (1-r1)*r3),
-   fI x+0.0, fI y+0.0, 0.0,   col, col, col,   fI (t+r2)/fI getNImages, fI ((1-r1)*(1-r3) + (1-r2)*r3),
-   fI x+0.0, fI y+1.0, 0.0,   col, col, col,   fI (t+r1)/fI getNImages, fI (r2*(1-r3) + r1*r3)
+   fI x+1.0, fI y+1.0,   col,   fI (t+1-r2)/fI getNImages, fI (r1*(1-r3) + r2*r3),
+   fI x+1.0, fI y+0.0,   col,   fI (t+1-r1)/fI getNImages, fI ((1-r2)*(1-r3) + (1-r1)*r3),
+   fI x+0.0, fI y+0.0,   col,   fI (t+r2)/fI getNImages, fI ((1-r1)*(1-r3) + (1-r2)*r3),
+   fI x+0.0, fI y+1.0,   col,   fI (t+r1)/fI getNImages, fI (r2*(1-r3) + r1*r3)
   ]
   where
     col | e>1       = fI (getNImages-e) / fI (getNImages-1) / 2
@@ -132,18 +133,19 @@ display :: StdGen -> IO ()
 display g =
   do
     inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
-    let context = (initChoices gridDim, g)
-    descriptor <- initResources ((getVertices.getFirstGrid.fst) context) indices
-    onDisplay inWindow descriptor context
+    -- let context = (initChoices gridDim, g)
+    -- descriptor <- initResources ((getVertices.getFirstGrid.initChoices) gridDim) indices
+    descriptor <- initResources (vertices g) indices
+    onDisplay inWindow descriptor --context
     closeWindow inWindow
 
-onDisplay :: RandomGen g => Window -> Descriptor -> ([WaveFuncCollapse.Matrix Choices], g) -> IO a
-onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) =
+-- onDisplay :: RandomGen g => Window -> Descriptor -> ([WaveFuncCollapse.Matrix Choices], g) -> IO a
+onDisplay win descriptor@(Descriptor vertexBuffer numIndices) = -- (gChoices, g) =
   do
     GL.clearColor $= Color4 0 0 0 1
     GL.clear [ColorBuffer]
 
-    updateVBO ((getVertices.getFirstGrid) gChoices) descriptor
+    -- updateVBO ((getVertices.getFirstGrid) gChoices) descriptor
 
     bindBuffer ArrayBuffer $= Just vertexBuffer
     drawElements Triangles numIndices GL.UnsignedInt nullPtr
@@ -151,7 +153,7 @@ onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) =
 
     forever $ do
        GLFW.pollEvents
-       onDisplay win descriptor (stepChoices g gChoices)
+       onDisplay win descriptor -- (stepChoices g gChoices)
 
 -- | Init resources
 ---------------------------------------------------------------------------
@@ -164,7 +166,7 @@ updateVBO vs descriptor@(Descriptor vertexBuffer numIndices) =
       do
         let sizev = fromIntegral (numVertices * sizeOf (head vs))
         bufferData ArrayBuffer $= (sizev, ptr, StaticDraw)
-    
+
     bindBuffer ArrayBuffer $= Nothing
     -- return $ Descriptor vertexBuffer numIndices
 
@@ -196,25 +198,25 @@ initResources vs idx =
 
     -- | Bind the pointer to the vertex attribute data
     let floatSize  = (fromIntegral $ sizeOf (0.0::GLfloat)) :: GLsizei
-        stride     = 8 * floatSize
+        stride     = 5 * floatSize
 
     -- | Positions
     let vPosition  = AttribLocation 0
         posOffset  = 0 * floatSize
     vertexAttribPointer vPosition $=
-        (ToFloat, VertexArrayDescriptor 3 Float stride (bufferOffset posOffset))
+        (ToFloat, VertexArrayDescriptor 2 Float stride (bufferOffset posOffset))
     vertexAttribArray vPosition   $= Enabled
 
     -- | Colors
     let vColor  = AttribLocation 1
-        clrOffset  = 3 * floatSize
+        clrOffset  = 2 * floatSize
     vertexAttribPointer vColor $=
-        (ToFloat, VertexArrayDescriptor 3 Float stride (bufferOffset clrOffset))
+        (ToFloat, VertexArrayDescriptor 1 Float stride (bufferOffset clrOffset))
     vertexAttribArray vColor   $= Enabled
 
     -- | UV
     let uvCoords   = AttribLocation 2
-        uvOffset   = 6 * floatSize
+        uvOffset   = 3 * floatSize
     vertexAttribPointer uvCoords  $=
         (ToFloat, VertexArrayDescriptor 2 Float stride (bufferOffset uvOffset))
     vertexAttribArray uvCoords    $= Enabled
@@ -271,4 +273,5 @@ main =
   do
     args <- getArgs
     let seed = (read (head args) :: Seed)
+    print (getTilesetSize * fst gridDim * snd gridDim)
     display (mkStdGen seed)

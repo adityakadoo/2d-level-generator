@@ -83,6 +83,8 @@ input_directory = f"resources/tilesets/{filename}/parts"
 output_image_path = f"resources/tilesets/{filename}/whole.png"
 join_images(input_directory, output_image_path, t_info)
 
+# print(list(t_edges.keys()))
+
 d = ['r', 'u', 'l', 'd']
 for edge in xml_data.find('neighbors').findall('neighbor'):
     l = edge.get('left').split(' ')
@@ -95,8 +97,9 @@ for edge in xml_data.find('neighbors').findall('neighbor'):
     r_idx = t_info[r_tile]['idx']+r_rot
     l_f = rot(t_info[l_tile]['sym'])
     r_f = rot(t_info[r_tile]['sym'])
-
+    # print("----------------",edge.get('left'), edge.get('right'))
     for i in range(4):
+        # print(l_idx, r_idx)
         t_edges[l_idx][d[i]].add(r_idx)
         t_edges[r_idx][d[(i+2)%4]].add(l_idx)
         l_idx = l_f(l_idx)
@@ -105,6 +108,7 @@ for edge in xml_data.find('neighbors').findall('neighbor'):
     l_idx = flip(t_info[l_tile]['sym'])(l_idx)
     r_idx = flip(t_info[r_tile]['sym'])(r_idx)
     for i in range(4):
+        # print(l_idx, r_idx)
         t_edges[l_idx][d[i]].add(r_idx)
         t_edges[r_idx][d[(i+2)%4]].add(l_idx)
         l_idx = l_f(l_idx)
@@ -138,7 +142,7 @@ with open(hs_outfile, '+w') as f:
         "  where\n",
         "    q = t `div` 8\n",
         "\n",
-        "tileNeighbours :: Tile -> [[Int]]\n"
+        "tileNeighbours :: Tile -> [[Tile]]\n"
     ])
     for key, val in t_edges.items():
         f.writelines([
