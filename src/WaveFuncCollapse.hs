@@ -12,16 +12,13 @@ type Tile = Word8
 type Edge = Int
 type Choices = [Tile]
 
-maxTile :: Tile
-maxTile = 255
-
 waveFuncStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> ([Matrix Choices], g)
 waveFuncStep g neighbours info (m:ms) = searchStep g neighbours info (prune neighbours m:ms)
 
 initGrid :: [Tile] -> (Int, Int) -> Matrix Choices
 initGrid tiles (gridWidth, gridHeight) = choices tiles blank
   where
-    blank = replicate gridWidth (replicate gridHeight maxTile)
+    blank = replicate gridWidth (replicate gridHeight (maxBound :: Tile))
     solved = replicate gridWidth (replicate gridHeight 0)
 
 waveFuncCollapse :: RandomGen g => g -> [Tile] -> (Tile -> [[Tile]]) -> (Tile -> Int) -> (Int, Int) -> [Grid]
@@ -32,7 +29,7 @@ waveFuncCollapse g tiles neighbours info dim = solver (initGrid tiles dim)
 choices :: [Tile] -> Grid -> Matrix Choices
 choices tiles = map (map choice)
   where
-    choice v = if v == maxTile then tiles else [v]
+    choice v = if v == (maxBound :: Tile) then tiles else [v]
 
 prune :: (Tile -> [[Tile]]) -> Matrix Choices -> Matrix Choices
 prune neighbours = pruneBy cols 0 . pruneBy rows 1
@@ -83,7 +80,7 @@ expand g info m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- xcs]
     replace [] = []
     replace (x:xs)
         | x > 1 = x:replace xs
-        | otherwise = maxTile:replace xs
+        | otherwise = (maxBound :: Tile):replace xs
 
 blocked :: (Tile -> [[Tile]]) -> Matrix Choices -> Bool
 blocked neighbours m = void m || not (safe neighbours m)

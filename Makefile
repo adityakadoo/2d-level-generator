@@ -13,7 +13,7 @@ run:
 	$(ODIR)/$(TARGET).app $(SEED)
 
 load:
-	ghci src/Main.hs src/LoadShaders.hs src/TilesetLoader.hs src/WaveFuncCollapse.hs src/Randomness.hs src/TSCircuit.hs src/TSFloorplan.hs src/TSCircles
+	ghci src/Main.hs src/LoadShaders.hs src/TilesetLoader.hs src/WaveFuncCollapse.hs src/Randomness.hs src/TSCircuit.hs src/TSFloorplan.hs src/TSCircles.hs src/TSCastle.hs
 
 .PHONY: clean
 
