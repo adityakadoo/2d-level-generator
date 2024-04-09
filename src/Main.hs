@@ -10,15 +10,14 @@ import Foreign.Storable (sizeOf)
 import LoadShaders
 import Graphics.GLUtil (readTexture, texture2DWrap)
 import Text.Printf
-import TilesetLoader
 import Data.Bifunctor ( Bifunctor(bimap) )
 import System.Environment (getArgs)
 import Randomness ( Seed )
 import Data.List (transpose)
 import Control.Monad.Random (RandomGen, mkStdGen, StdGen)
 import WaveFuncCollapse
-import Data.IORef (IORef, newIORef, writeIORef)
 import Data.Word (Word8)
+import TilesetLoader
 
 data Descriptor =
      Descriptor BufferObject NumArrayIndices
@@ -51,35 +50,46 @@ instance PrintfArg a => Show (GLMatrix a) where
                      m41 m42 m43 m44
 
 cellSize :: Int
-cellSize = 20
+cellSize = 40
 
 gridDim :: (Int, Int)
-gridDim = (16,16)
+gridDim = (16,8)
 
-firstGrid :: RandomGen g => g -> [[Tile]]
-firstGrid g = getGrid g gridDim
+genGrid :: RandomGen g => g -> Tileset -> Grid
+genGrid g tileset = head (waveFuncCollapse g (tileIdx tileset) (neighbors tileset) (weights tileset) gridDim)
 
-getVertices :: [[Tile]] -> [GLfloat]
-getVertices grid = concatMap tileToVert
-  (concat (enumerate2D (map (map tileMapping . reverse) (transpose grid))))
+getVertices :: Int -> Grid -> [GLfloat]
+getVertices nImgs grid = concatMap (tileToVert nImgs)
+  (concat (enumerate2D (map reverse grid)))
 
-tileToVert :: (Int, Int, (Int, (Int, Int, Int))) -> [GLfloat]
-tileToVert (x,y,(t,(r1,r2,r3))) =
-  [ -- | positions          -- | colors      -- | uv
-   fI x+1.0, fI y+1.0,   col,          fI (t+1-r2)/fI getNImages, fI (r1*(1-r3) + r2*r3),
-   fI x+1.0, fI y+0.0,   col,          fI (t+1-r1)/fI getNImages, fI ((1-r2)*(1-r3) + (1-r1)*r3),
-   fI x+0.0, fI y+0.0,   col,          fI (t+r2)/fI getNImages, fI ((1-r1)*(1-r3) + (1-r2)*r3),
-   fI x+0.0, fI y+1.0,   col,          fI (t+r1)/fI getNImages, fI (r2*(1-r3) + r1*r3)
-  ]
+enumerate2D :: [[a]] -> [[(Int, Int, a)]]
+enumerate2D m = zipWith (\ i xs -> map (\ (j,x) -> (i,j,x)) xs) [0..] (map (zip [0..]) m)
+
+tileToVert :: Int -> (Int, Int, Tile) -> [GLfloat]
+tileToVert nImgs (x,y,tile)
+  | tile == maxBound = getVert (x,y, fromIntegral tile, (0,0,0))
+  | otherwise = getVert (x,y, t1, (((r `div` 2) + (r `mod` 2)) `mod` 2,
+  r `div` 2, z))
   where
-    col | t == fromIntegral (maxBound :: Tile) = 0.0
-        | otherwise = 1.0
+    t1 = fromIntegral tile `div` 8
+    r = fromIntegral tile `mod` 4
+    z = fromIntegral (tile `mod` 8) `div` 4
+    getVert (x,y,t,(r1,r2,r3)) =
+      [ -- | positions        -- | colors     -- | uv
+        fI x+1.0, fI y+1.0,   col,   fI (t+1-r2)/fI nImgs, fI (r1*(1-r3) + r2*r3),
+        fI x+1.0, fI y+0.0,   col,   fI (t+1-r1)/fI nImgs, fI ((1-r2)*(1-r3) + (1-r1)*r3),
+        fI x+0.0, fI y+0.0,   col,   fI (t+r2)/fI nImgs, fI ((1-r1)*(1-r3) + (1-r2)*r3),
+        fI x+0.0, fI y+1.0,   col,   fI (t+r1)/fI nImgs, fI (r2*(1-r3) + r1*r3)
+      ]
+      where
+        col | t == fromIntegral (maxBound :: Tile) = 0.0
+            | otherwise = 1.0
 
 fI :: Int -> GLfloat
 fI = fromIntegral
 
-vertices :: RandomGen g => g -> [GLfloat]
-vertices g = getVertices (firstGrid g)
+vertices :: RandomGen g => g -> Tileset -> [GLfloat]
+vertices g tileset = getVertices (nImages tileset) (genGrid g tileset)
 
 indices :: [GLuint]
 indices = concatMap (\x -> map (+(4*x)) [
@@ -129,32 +139,35 @@ closeWindow win =
     GLFW.destroyWindow win
     GLFW.terminate
 
-display :: StdGen -> IO ()
-display g =
+display :: StdGen -> String -> IO ()
+display g tilesetName =
   do
     inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
-    let context = (initChoices gridDim, g)
-    descriptor <- initResources ((getVertices.getFirstGrid.fst) context) indices
-    -- descriptor <- initResources (vertices g) indices
-    onDisplay inWindow descriptor context
+    tileset <- fetchTileset tilesetName
+    let context = ([initGrid (tileIdx tileset) gridDim], g)
+    descriptor <- initResources (imgPath tileset)
+      ((getVertices (nImages tileset).getFirstGrid.fst) context) indices
+    -- descriptor <- initResources (imgPath tileset) (vertices g tileset) indices
+    onDisplay inWindow descriptor context tileset
     closeWindow inWindow
 
-onDisplay :: RandomGen g => Window -> Descriptor -> ([WaveFuncCollapse.Matrix Choices], g) -> IO a
-onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) =
+-- onDisplay :: RandomGen g => Window -> Descriptor -> ([WaveFuncCollapse.Matrix Choices], g) -> IO a
+onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) tileset =
   do
     GL.clearColor $= Color4 0 0 0 1
     GL.clear [ColorBuffer]
 
-    updateVBO ((getVertices.getFirstGrid) gChoices) descriptor
+    updateVBO ((getVertices (nImages tileset).getFirstGrid) gChoices) descriptor
 
     bindBuffer ArrayBuffer $= Just vertexBuffer
     drawElements Triangles numIndices GL.UnsignedInt nullPtr
-    bindBuffer ArrayBuffer $= Nothing
     GLFW.swapBuffers win
 
     forever $ do
        GLFW.pollEvents
-       onDisplay win descriptor (stepChoices (gChoices, g))
+       let newContext = waveFuncStep g (neighbors tileset) (weights tileset) gChoices
+      --  let newContext = (gChoices, g)
+       onDisplay win descriptor newContext tileset
 
 -- | Init resources
 ---------------------------------------------------------------------------
@@ -172,8 +185,8 @@ updateVBO vs descriptor@(Descriptor vertexBuffer numIndices) =
     -- return $ Descriptor vertexBuffer numIndices
 
 
-initResources :: [GLfloat] -> [GLuint] -> IO Descriptor
-initResources vs idx =
+initResources :: String -> [GLfloat] -> [GLuint] -> IO Descriptor
+initResources imgPath vs idx =
   do
     -- | VAO
     triangles <- genObjectName
@@ -225,7 +238,7 @@ initResources vs idx =
 
     -- | Assign Textures
     activeTexture            $= TextureUnit 0
-    let tex_00 = getTilesetImage
+    let tex_00 = imgPath
     tx0 <- loadTex tex_00
     texture Texture2D        $= Enabled
     textureBinding Texture2D $= Just tx0
@@ -274,5 +287,5 @@ main =
   do
     args <- getArgs
     let seed = (read (head args) :: Seed)
-    print (getTilesetSize * fst gridDim * snd gridDim)
-    display (mkStdGen seed)
+    let tilesetName = args !! 1
+    display (mkStdGen seed) tilesetName

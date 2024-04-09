@@ -8,7 +8,7 @@
     <tile name="t" symmetry="T" weight="1"/>
     <tile name="track" symmetry="I" weight="20"/>
     <tile name="transition" symmetry="T" weight="4"/>
-    <tile name="turn" symmetry="L" weight="10"/>
+    <tile name="turn" symmetry="L" weight="0"/>
     <tile name="viad" symmetry="I" weight="1"/>
     <tile name="vias" symmetry="T" weight="3"/>
     <tile name="wire" symmetry="I" weight="5"/>

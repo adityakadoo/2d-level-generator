@@ -12,6 +12,12 @@ type Tile = Word8
 type Edge = Int
 type Choices = [Tile]
 
+getFirstGrid :: [Matrix Choices] -> Grid
+getFirstGrid = map (map keepFilled) . head
+  where
+    keepFilled [a] = a
+    keepFilled _ = maxBound :: Tile
+
 waveFuncStep :: RandomGen g => g -> (Tile -> [[Tile]]) -> (Tile -> Int) -> [Matrix Choices] -> ([Matrix Choices], g)
 waveFuncStep g neighbours info (m:ms) = searchStep g neighbours info (prune neighbours m:ms)
 
