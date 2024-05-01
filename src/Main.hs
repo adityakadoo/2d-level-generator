@@ -18,6 +18,7 @@ import Control.Monad.Random (RandomGen, mkStdGen, StdGen)
 import WaveFuncCollapse
 import Data.Word (Word8)
 import TilesetLoader
+import Strategies (entropyStrat, firstYStrat, randomStrat, ogStrat, enumerate2D, badRandomStrat)
 
 data Descriptor =
      Descriptor BufferObject NumArrayIndices
@@ -50,20 +51,20 @@ instance PrintfArg a => Show (GLMatrix a) where
                      m41 m42 m43 m44
 
 cellSize :: Int
-cellSize = 40
+cellSize = 25
 
 gridDim :: (Int, Int)
 gridDim = (16,8)
 
-genGrid :: RandomGen g => g -> Tileset -> Grid
-genGrid g tileset = head (waveFuncCollapse g (tileIdx tileset) (neighbors tileset) (weights tileset) gridDim)
+strat :: RandomGen p => Int -> Tileset -> Strategy p
+strat seed tileset = entropyStrat (weights tileset)
+
+genGrid :: RandomGen g => Int -> g -> Tileset -> Grid
+genGrid seed g tileset = head (waveFuncCollapse g (tileIdx tileset) (neighbors tileset) (strat seed tileset) gridDim)
 
 getVertices :: Int -> Grid -> [GLfloat]
 getVertices nImgs grid = concatMap (tileToVert nImgs)
   (concat (enumerate2D (map reverse grid)))
-
-enumerate2D :: [[a]] -> [[(Int, Int, a)]]
-enumerate2D m = zipWith (\ i xs -> map (\ (j,x) -> (i,j,x)) xs) [0..] (map (zip [0..]) m)
 
 tileToVert :: Int -> (Int, Int, Tile) -> [GLfloat]
 tileToVert nImgs (x,y,tile)
@@ -88,8 +89,8 @@ tileToVert nImgs (x,y,tile)
 fI :: Int -> GLfloat
 fI = fromIntegral
 
-vertices :: RandomGen g => g -> Tileset -> [GLfloat]
-vertices g tileset = getVertices (nImages tileset) (genGrid g tileset)
+vertices :: RandomGen g => Int -> g -> Tileset -> [GLfloat]
+vertices seed g tileset = getVertices (nImages tileset) (genGrid seed g tileset)
 
 indices :: [GLuint]
 indices = concatMap (\x -> map (+(4*x)) [
@@ -139,8 +140,8 @@ closeWindow win =
     GLFW.destroyWindow win
     GLFW.terminate
 
-display :: StdGen -> String -> IO ()
-display g tilesetName =
+display :: Int -> StdGen -> String -> IO ()
+display seed g tilesetName =
   do
     inWindow <- openWindow "2D Level Generator" (bimap (cellSize *) (cellSize *) gridDim)
     tileset <- fetchTileset tilesetName
@@ -148,11 +149,12 @@ display g tilesetName =
     descriptor <- initResources (imgPath tileset)
       ((getVertices (nImages tileset).getFirstGrid.fst) context) indices
     -- descriptor <- initResources (imgPath tileset) (vertices g tileset) indices
-    onDisplay inWindow descriptor context tileset
+    -- a <- getLine
+    onDisplay seed inWindow descriptor context tileset
     closeWindow inWindow
 
 -- onDisplay :: RandomGen g => Window -> Descriptor -> ([WaveFuncCollapse.Matrix Choices], g) -> IO a
-onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) tileset =
+onDisplay seed win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) tileset =
   do
     GL.clearColor $= Color4 0 0 0 1
     GL.clear [ColorBuffer]
@@ -165,9 +167,19 @@ onDisplay win descriptor@(Descriptor vertexBuffer numIndices) (gChoices, g) tile
 
     forever $ do
        GLFW.pollEvents
-       let newContext = waveFuncStep g (neighbors tileset) (weights tileset) gChoices
+       let newContext = waveFuncStep g (neighbors tileset) (strat seed tileset) gChoices
+      --  let minEntropy = minimum (map (minimum . map (replace.entropy)) (head (fst newContext)))
+      --  let allEntropy = map (map (replace.entropy)) (head (fst newContext))
+      --  let (rows1, row : rows2) = span (all ((>minEntropy) . replace . entropy)) (head (fst newContext))
+      --  let (row1, cs : row2)    = span ((>minEntropy) . replace . entropy) row
+      --  print [allEntropy]
       --  let newContext = (gChoices, g)
-       onDisplay win descriptor newContext tileset
+       onDisplay seed win descriptor newContext tileset
+  -- where
+  --   replace x
+  --       | x > 0     = x
+  --       | otherwise = read "Infinity"::Double
+  --   entropy = sum.map (\x -> -(x * log (x+1e-5))).(\x -> map (/sum x) x).map (fromIntegral . weights tileset)
 
 -- | Init resources
 ---------------------------------------------------------------------------
@@ -288,4 +300,4 @@ main =
     args <- getArgs
     let seed = (read (head args) :: Seed)
     let tilesetName = args !! 1
-    display (mkStdGen seed) tilesetName
+    display seed (mkStdGen seed) tilesetName
