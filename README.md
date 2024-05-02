@@ -6,21 +6,13 @@ constraints. This library can also visualize the process of generation of the 2-
 layouts through a graphical interface. The generation strategies can be switched and compared
 easily.
 
+# WFC Algorithm Repository
+The original [code repository](https://github.com/mxgmn/WaveFunctionCollapse/tree/master)  by Maxim Gumin has the WFC algorithm implemented in
+C# programming language. This code base has been translated to several other
+programming languages such as C++, Python, Rust, Go, Java, JavaScript, etc. but not to Haskell! </br>
+This repository also has a dataset of example tile-sets. These tile-sets have a set of tile
+images accompanied by an XML file that stores the constraints between neighbouring
+tiles and the tile weights to be used while random sampling. These tile-sets are used for
+generating our simulations as well.
 
-## check-list
 
-- Circuit components (total=40)
-  - bridge x2
-  - component x1
-  - connection x4
-  - corner x4
-  - dskew x2
-  - skew x4
-  - substrate x1
-  - t x4
-  - track x2
-  - transition x4
-  - turn x4
-  - viad x2
-  - vias x4
-  - wire x2
