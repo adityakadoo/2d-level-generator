@@ -1,5 +1,11 @@
 # 2d-level-generator
-project for CS 613
+A procedural 2D level generation library utilizing the Wave-Function
+Collapse (WFC) algorithm in Haskell programming language.
+The library comes with all the necessary utilities to process various tile-sets and their
+constraints. This library can also visualize the process of generation of the 2-dimensional game
+layouts through a graphical interface. The generation strategies can be switched and compared
+easily.
+
 
 ## check-list
 
