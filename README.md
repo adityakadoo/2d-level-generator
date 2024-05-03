@@ -6,13 +6,46 @@ constraints. This library can also visualize the process of generation of the 2-
 layouts through a graphical interface. The generation strategies can be switched and compared
 easily.
 
-# WFC Algorithm Repository
-The original [code repository](https://github.com/mxgmn/WaveFunctionCollapse/tree/master)  by Maxim Gumin has the WFC algorithm implemented in
-C# programming language. This code base has been translated to several other
-programming languages such as C++, Python, Rust, Go, Java, JavaScript, etc. but not to Haskell! </br>
-This repository also has a dataset of example tile-sets. These tile-sets have a set of tile
-images accompanied by an XML file that stores the constraints between neighbouring
-tiles and the tile weights to be used while random sampling. These tile-sets are used for
-generating our simulations as well.
+## Directory Structure
+```
+.
+├── build/
+├── Makefile
+├── resources/
+│   ├── shaders/
+│   │   ├── shader.frag
+│   │   └── shader.vert
+│   └── tilesets/
+│       └── [example-tileset]/
+│           ├── constraints.xml
+│           └── whole.png
+└── src/
+    ├── LoadShaders.hs
+    ├── Main.hs
+    ├── Randomness.hs
+    ├── Strategies.hs
+    ├── TilesetLoader.hs
+    └── WaveFuncCollapse.hs
+```
 
+## Instructions
 
+- Compile: Creates a binary.
+
+```
+>>> make compile
+```
+
+- Run: Executes the binary with following arguments,
+  - `SEED` is an integer that controls the pseudo-random number generator.
+  - `TILESET` can be chosen from `["circuit", "castle", "floorplan", "circles"]`.
+
+```
+>>> make run SEED="123" TILESET="circuit"
+```
+
+- Debug: Starts a GHCI session with all the program files loaded.
+
+```
+>>> make load
+```
