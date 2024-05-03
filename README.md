@@ -7,6 +7,7 @@ layouts through a graphical interface. The generation strategies can be switched
 easily.
 
 ## Directory Structure
+
 ```
 .
 ├── build/
